@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>番茄工作法计时器</title>
+  <!-- 引入外部资源 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- Tailwind 配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            tomato: {
+              DEFAULT: '#FF6B35',
+              light: '#FF8A5C',
+              dark: '#E55A27'
+            },
+            rest: {
+              DEFAULT: '#4CAF50',
+              light: '#66BB6A',
+              dark: '#388E3C'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义样式 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      /* 背景样式 - 工作模式和休息模式 */
+      .tomato-bg {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        background-image: 
+          radial-gradient(#FF6B3511 1px, transparent 1px),
+          radial-gradient(#FF6B3511 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 0 0, 20px 20px;
+      }
+      .rest-bg {
+        background: linear-gradient(135deg, #f1f8e9 0%, #e8f5e9 100%);
+        background-image: 
+          radial-gradient(#4CAF5011 1px, transparent 1px),
+          radial-gradient(#4CAF5011 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: 0 0, 20px 20px;
+      }
+      /* 番茄脉动动画 - 随时间变化强度 */
+      .pulse-soft {
+        animation: pulse-soft 3s infinite ease-in-out;
+      }
+      .pulse-medium {
+        animation: pulse-medium 2s infinite ease-in-out;
+      }
+      .pulse-strong {
+        animation: pulse-strong 1s infinite ease-in-out;
+      }
+      /* 小番茄奖励进入动画 */
+      .float-in {
+        animation: float-in 0.5s forwards ease-out;
+      }
+      /* 计时结束震动效果 */
+      .vibrate {
+        animation: vibrate 0.5s infinite;
+      }
+      /* 通知框滑入滑出动画 */
+      .notification-slide {
+        animation: notification-slide 0.5s forwards, 
+                   notification-slide 0.5s reverse forwards 3.5s;
+      }
+    }
+    
+    /* 动画关键帧定义 */
+    @keyframes pulse-soft {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    
+    @keyframes pulse-medium {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+    
+    @keyframes pulse-strong {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    
+    @keyframes float-in {
+      0% { transform: translateY(20px) scale(0.8); opacity: 0; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    
+    @keyframes vibrate {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-2px) rotate(-2deg); }
+      40% { transform: translateX(2px) rotate(2deg); }
+      60% { transform: translateX(-2px) rotate(-2deg); }
+      80% { transform: translateX(2px) rotate(2deg); }
+    }
+    
+    @keyframes notification-slide {
+      0% { transform: translateY(-100%); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="min-h-screen transition-all duration-1000 ease-in-out tomato-bg font-sans">
+  <!-- 顶部通知框 -->
+  <div id="notification" class="fixed top-0 left-0 right-0 z-50 bg-white shadow-lg p-4 text-center transform -translate-y-full opacity-0 transition-all duration-500">
+    <p id="notification-text" class="text-lg font-medium"></p>
+  </div>
+  
+  <!-- 日期显示 -->
+  <header class="py-6 text-center">
+    <h1 id="current-date" class="text-[clamp(1.2rem,3vw,1.8rem)] font-bold text-gray-700 transition-colors duration-1000"></h1>
+  </header>
+  
+  <main class="container mx-auto px-4 max-w-4xl">
+    <!-- 番茄计时器 -->
+    <section class="flex justify-center items-center my-8 mb-16">
+      <div id="timer-container" class="relative w-[clamp(250px,60vw,400px)] h-[clamp(250px,60vw,400px)]">
+        <!-- 进度环 SVG -->
+        <svg class="w-full h-full" viewBox="0 0 100 100">
+          <circle 
+            cx="50" cy="50" r="45" 
+            fill="none" 
+            stroke="#e9ecef" 
+            stroke-width="8" 
+            class="transition-colors duration-1000"
+            id="timer-bg-circle"
+          />
+          <circle 
+            cx="50" cy="50" r="45" 
+            fill="none" 
+            stroke="#FF6B35" 
+            stroke-width="8" 
+            stroke-linecap="round"
+            stroke-dasharray="283" 
+            stroke-dashoffset="0"
+            transform="rotate(-90 50 50)"
+            class="transition-colors duration-1000"
+            id="timer-progress-circle"
+          />
+        </svg>
+        
+        <!-- 番茄图形 -->
+        <div id="tomato" class="absolute inset-0 flex flex-col items-center justify-center pulse-soft transition-all duration-1000">
+          <!-- 叶子和藤蔓 -->
+          <div class="relative -mb-6 transform rotate-12">
+            <div class="w-12 h-4 bg-rest rounded-full"></div>
+            <div class="absolute -top-6 left-8 w-8 h-8 bg-rest rounded-full transform rotate-45"></div>
+            <div class="absolute -top-2 left-10 w-6 h-6 bg-rest-light rounded-full"></div>
+          </div>
+          
+          <!-- 番茄主体 -->
+          <div class="w-[clamp(180px,45vw,280px)] h-[clamp(180px,45vw,280px)] rounded-full bg-gradient-to-br from-tomato-light to-tomato-dark shadow-lg relative overflow-hidden transition-all duration-1000" id="tomato-body">
+            <!-- 光泽效果 -->
+            <div class="absolute top-8 left-8 w-1/3 h-1/3 rounded-full bg-white/30 blur-sm transform -rotate-12"></div>
+            
+            <!-- 纹理细节 -->
+            <div class="absolute inset-0 opacity-10">
+              <div class="absolute top-1/4 left-0 w-full h-1 bg-red-900 rounded-full"></div>
+              <div class="absolute top-2/4 left-0 w-full h-1 bg-red-900 rounded-full"></div>
+              <div class="absolute top-3/4 left-0 w-full h-1 bg-red-900 rounded-full"></div>
+            </div>
+            
+            <!-- 时间显示 -->
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="time-display" class="text-white text-[clamp(2.5rem,8vw,4rem)] font-bold tracking-tighter">25:00</span>
+              <span id="mode-display" class="text-white/90 text-[clamp(1rem,3vw,1.2rem)] mt-2">工作时间</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- 控制按钮 -->
+    <section class="flex justify-center gap-6 mb-12">
+      <button id="reset-btn" class="px-6 py-3 bg-white rounded-full shadow-md hover:shadow-lg transform hover:-translate-y-1 transition-all duration-300 flex items-center gap-2">
+        <i class="fa fa-refresh text-gray-600"></i>
+        <span class="font-medium text-gray-700">重置</span>
+      </button>
+      <button id="start-btn" class="px-8 py-4 bg-tomato hover:bg-tomato-dark text-white rounded-full shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 flex items-center gap-2 text-lg">
+        <i class="fa fa-play"></i>
+        <span class="font-bold">开始</span>
+      </button>
+    </section>
+    
+    <!-- 时间设置 -->
+    <section class="bg-white rounded-2xl shadow-xl p-6 mb-12 transition-all duration-1000" id="settings-card">
+      <h2 class="text-xl font-bold text-center mb-6 text-gray-700">时间设置</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- 工作时间设置 -->
+        <div class="flex flex-col items-center">
+          <div class="flex items-center gap-4 mb-2">
+            <span class="text-lg font-medium text-tomato">工作时间</span>
+            <span id="work-time-display" class="text-2xl font-bold text-gray-800">25</span>
+            <span class="text-gray-500">分钟</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="decrease-work" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300">
+              <i class="fa fa-minus text-gray-600"></i>
+            </button>
+            <button id="increase-work" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300">
+              <i class="fa fa-plus text-gray-600"></i>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 休息时间设置 -->
+        <div class="flex flex-col items-center">
+          <div class="flex items-center gap-4 mb-2">
+            <span class="text-lg font-medium text-rest">休息时间</span>
+            <span id="rest-time-display" class="text-2xl font-bold text-gray-800">5</span>
+            <span class="text-gray-500">分钟</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="decrease-rest" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300">
+              <i class="fa fa-minus text-gray-600"></i>
+            </button>
+            <button id="increase-rest" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-300">
+              <i class="fa fa-plus text-gray-600"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- 统计和收获 -->
+    <section class="mb-16">
+      <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 transition-all duration-1000" id="stats-card">
+        <h2 class="text-xl font-bold text-center mb-4 text-gray-700">今日统计</h2>
+        <div class="flex justify-center items-center gap-3">
+          <div class="w-12 h-12 bg-tomato rounded-full flex items-center justify-center text-white">
+            <i class="fa fa-trophy text-xl"></i>
+          </div>
+          <span class="text-2xl font-bold text-gray-800">已完成 <span id="completed-count" class="text-tomato">0</span> 个番茄</span>
+        </div>
+      </div>
+      
+      <div class="bg-white rounded-2xl shadow-xl p-6 transition-all duration-1000" id="rewards-card">
+        <h2 class="text-xl font-bold text-center mb-6 text-gray-700">今日收获</h2>
+        <div id="rewards-container" class="flex flex-wrap justify-center gap-4 min-h-[100px] items-center">
+          <p class="text-gray-500 italic" id="empty-rewards">完成番茄计时，收获你的小番茄吧！</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  
+  <footer class="py-6 text-center text-gray-500 text-sm">
+    <p>番茄工作法计时器 &copy; <span id="current-year"></span>|<span></span>联系QQ/微信：8812182</span></p>
+  </footer>
+  
+  <!-- 提示音 -->
+  <audio id="notification-sound" preload="auto">
+    <source src="https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3" type="audio/mpeg">
+  </audio>
+  
+  <script>
+    // 全局变量
+    let timer = null;
+    let isRunning = false;
+    let currentTime = 25 * 60; // 默认25分钟（秒）
+    let workTime = 25 * 60;    // 工作时间（秒）
+    let restTime = 5 * 60;     // 休息时间（秒）
+    let isWorkMode = true;     // 当前是否为工作模式
+    let completedPomodoros = 0; // 已完成的番茄数
+    
+    // DOM元素
+    const timeDisplay = document.getElementById('time-display');
+    const modeDisplay = document.getElementById('mode-display');
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const workTimeDisplay = document.getElementById('work-time-display');
+    const restTimeDisplay = document.getElementById('rest-time-display');
+    const decreaseWorkBtn = document.getElementById('decrease-work');
+    const increaseWorkBtn = document.getElementById('increase-work');
+    const decreaseRestBtn = document.getElementById('decrease-rest');
+    const increaseRestBtn = document.getElementById('increase-rest');
+    const progressCircle = document.getElementById('timer-progress-circle');
+    const timerBgCircle = document.getElementById('timer-bg-circle');
+    const tomatoBody = document.getElementById('tomato-body');
+    const tomato = document.getElementById('tomato');
+    const body = document.body;
+    const settingsCard = document.getElementById('settings-card');
+    const statsCard = document.getElementById('stats-card');
+    const rewardsCard = document.getElementById('rewards-card');
+    const completedCount = document.getElementById('completed-count');
+    const rewardsContainer = document.getElementById('rewards-container');
+    const emptyRewards = document.getElementById('empty-rewards');
+    const notification = document.getElementById('notification');
+    const notificationText = document.getElementById('notification-text');
+    const notificationSound = document.getElementById('notification-sound');
+    const currentDateEl = document.getElementById('current-date');
+    const currentYearEl = document.getElementById('current-year');
+    
+    // 初始化
+    function init() {
+      // 加载本地存储数据
+      loadData();
+      
+      // 更新显示
+      updateTimeDisplay();
+      updateProgress();
+      updateCompletedCount();
+      updateDateDisplay();
+      
+      // 事件监听
+      startBtn.addEventListener('click', toggleTimer);
+      resetBtn.addEventListener('click', resetTimer);
+      
+      decreaseWorkBtn.addEventListener('click', () => adjustTime('work', -1));
+      increaseWorkBtn.addEventListener('click', () => adjustTime('work', 1));
+      decreaseRestBtn.addEventListener('click', () => adjustTime('rest', -1));
+      increaseRestBtn.addEventListener('click', () => adjustTime('rest', 1));
+      
+      // 键盘快捷键
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          toggleTimer();
+        } else if (e.code === 'KeyR') {
+          resetTimer();
+        }
+      });
+    }
+    
+    // 加载本地存储数据
+    function loadData() {
+      const savedData = localStorage.getItem('pomodoroData');
+      const today = getDateString();
+      
+      if (savedData) {
+        const data = JSON.parse(savedData);
+        
+        // 检查数据是否是今天的，如果不是则重置
+        if (data.date === today) {
+          completedPomodoros = data.completedPomodoros || 0;
+          workTime = data.workTime || 25 * 60;
+          restTime = data.restTime || 5 * 60;
+          
+          // 更新显示的时间（分钟）
+          workTimeDisplay.textContent = Math.floor(workTime / 60);
+          restTimeDisplay.textContent = Math.floor(restTime / 60);
+          
+          // 恢复奖励显示
+          for (let i = 0; i < completedPomodoros; i++) {
+            addReward();
+          }
+        } else {
+          // 不是今天的数据，重置
+          saveData();
+        }
+      } else {
+        // 没有数据，初始化
+        saveData();
+      }
+      
+      // 设置当前时间
+      currentTime = isWorkMode ? workTime : restTime;
+    }
+    
+    // 保存数据到本地存储
+    function saveData() {
+      const data = {
+        date: getDateString(),
+        completedPomodoros,
+        workTime,
+        restTime
+      };
+      
+      localStorage.setItem('pomodoroData', JSON.stringify(data));
+    }
+    
+    // 获取当前日期字符串（YYYY-MM-DD）
+    function getDateString() {
+      const date = new Date();
+      return date.toISOString().split('T')[0];
+    }
+    
+    // 更新日期显示
+    function updateDateDisplay() {
+      const date = new Date();
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+      const weekday = weekdays[date.getDay()];
+      
+      currentDateEl.textContent = `${year}年${month}月${day}日 星期${weekday}`;
+      currentYearEl.textContent = year;
+    }
+    
+    // 调整工作/休息时间
+    function adjustTime(type, amount) {
+      if (isRunning) return; // 计时中不能调整
+      
+      if (type === 'work') {
+        const newMinutes = Math.floor(workTime / 60) + amount;
+        if (newMinutes >= 1 && newMinutes <= 60) {
+          workTime = newMinutes * 60;
+          workTimeDisplay.textContent = newMinutes;
+          if (isWorkMode) {
+            currentTime = workTime;
+            updateTimeDisplay();
+            updateProgress();
+          }
+        }
+      } else if (type === 'rest') {
+        const newMinutes = Math.floor(restTime / 60) + amount;
+        if (newMinutes >= 1 && newMinutes <= 30) {
+          restTime = newMinutes * 60;
+          restTimeDisplay.textContent = newMinutes;
+          if (!isWorkMode) {
+            currentTime = restTime;
+            updateTimeDisplay();
+            updateProgress();
+          }
+        }
+      }
+      
+      saveData();
+    }
+    
+    // 切换计时器（开始/暂停）
+    function toggleTimer() {
+      if (isRunning) {
+        // 暂停计时器
+        clearInterval(timer);
+        startBtn.innerHTML = '<i class="fa fa-play"></i><span class="font-bold">继续</span>';
+        tomato.classList.remove('pulse-soft', 'pulse-medium', 'pulse-strong');
+      } else {
+        // 开始计时器
+        timer = setInterval(updateTimer, 1000);
+        startBtn.innerHTML = '<i class="fa fa-pause"></i><span class="font-bold">暂停</span>';
+        updatePulseEffect();
+      }
+      
+      isRunning = !isRunning;
+    }
+    
+    // 重置计时器
+    function resetTimer() {
+      clearInterval(timer);
+      isRunning = false;
+      currentTime = isWorkMode ? workTime : restTime;
+      updateTimeDisplay();
+      updateProgress();
+      startBtn.innerHTML = '<i class="fa fa-play"></i><span class="font-bold">开始</span>';
+      tomato.classList.remove('pulse-soft', 'pulse-medium', 'pulse-strong');
+    }
+    
+    // 更新计时器
+    function updateTimer() {
+      if (currentTime > 0) {
+        currentTime--;
+        updateTimeDisplay();
+        updateProgress();
+        updatePulseEffect();
+      } else {
+        // 计时结束
+        clearInterval(timer);
+        isRunning = false;
+        
+        // 播放提示音
+        notificationSound.play();
+        
+        // 震动效果
+        tomato.classList.add('vibrate');
+        
+        // 显示通知
+        showNotification(isWorkMode ? '工作时间结束！' : '休息时间结束！');
+        
+        if (isWorkMode) {
+          // 完成一个番茄
+          completedPomodoros++;
+          saveData();
+          updateCompletedCount();
+          addReward();
+        }
+        
+        // 切换模式
+        switchMode();
+        
+        // 3秒后自动开始下一个计时
+        setTimeout(() => {
+          tomato.classList.remove('vibrate');
+          toggleTimer();
+        }, 3000);
+      }
+    }
+    
+    // 切换工作/休息模式
+    function switchMode() {
+      isWorkMode = !isWorkMode;
+      currentTime = isWorkMode ? workTime : restTime;
+      
+      // 更新显示
+      updateTimeDisplay();
+      updateProgress();
+      modeDisplay.textContent = isWorkMode ? '工作时间' : '休息时间';
+      
+      // 更新样式
+      if (isWorkMode) {
+        // 工作模式 - 番茄红
+        body.classList.remove('rest-bg');
+        body.classList.add('tomato-bg');
+        tomatoBody.classList.remove('from-rest-light', 'to-rest-dark');
+        tomatoBody.classList.add('from-tomato-light', 'to-tomato-dark');
+        progressCircle.classList.remove('text-rest');
+        progressCircle.classList.add('text-tomato');
+        startBtn.classList.remove('bg-rest', 'hover:bg-rest-dark');
+        startBtn.classList.add('bg-tomato', 'hover:bg-tomato-dark');
+        completedCount.classList.remove('text-rest');
+        completedCount.classList.add('text-tomato');
+        settingsCard.classList.remove('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+        statsCard.classList.remove('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+        rewardsCard.classList.remove('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+      } else {
+        // 休息模式 - 绿色
+        body.classList.remove('tomato-bg');
+        body.classList.add('rest-bg');
+        tomatoBody.classList.remove('from-tomato-light', 'to-tomato-dark');
+        tomatoBody.classList.add('from-rest-light', 'to-rest-dark');
+        progressCircle.classList.remove('text-tomato');
+        progressCircle.classList.add('text-rest');
+        startBtn.classList.remove('bg-tomato', 'hover:bg-tomato-dark');
+        startBtn.classList.add('bg-rest', 'hover:bg-rest-dark');
+        completedCount.classList.remove('text-tomato');
+        completedCount.classList.add('text-rest');
+        settingsCard.classList.add('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+        statsCard.classList.add('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+        rewardsCard.classList.add('shadow-[0_10px_25px_rgba(76,175,80,0.15)]');
+      }
+    }
+    
+    // 更新时间显示
+    function updateTimeDisplay() {
+      const minutes = Math.floor(currentTime / 60);
+      const seconds = currentTime % 60;
+      timeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // 更新进度环
+    function updateProgress() {
+      const totalTime = isWorkMode ? workTime : restTime;
+      const progress = currentTime / totalTime;
+      const circumference = 2 * Math.PI * 45; // 2πr，r=45
+      const offset = circumference - (progress * circumference);
+      progressCircle.style.strokeDasharray = circumference;
+      progressCircle.style.strokeDashoffset = offset;
+    }
+    
+    // 更新脉动效果
+    function updatePulseEffect() {
+      const totalTime = isWorkMode ? workTime : restTime;
+      const remainingPercentage = currentTime / totalTime;
+      
+      tomato.classList.remove('pulse-soft', 'pulse-medium', 'pulse-strong');
+      
+      if (remainingPercentage > 0.5) {
+        tomato.classList.add('pulse-soft');
+      } else if (remainingPercentage > 0.2) {
+        tomato.classList.add('pulse-medium');
+      } else {
+        tomato.classList.add('pulse-strong');
+      }
+    }
+    
+    // 显示通知
+    function showNotification(message) {
+      notificationText.textContent = message;
+      notification.classList.add('notification-slide');
+      
+      setTimeout(() => {
+        notification.classList.remove('notification-slide');
+      }, 4000);
+    }
+    
+    // 更新已完成计数
+    function updateCompletedCount() {
+      completedCount.textContent = completedPomodoros;
+    }
+    
+    // 添加奖励小番茄
+    function addReward() {
+      if (completedPomodoros === 1) {
+        emptyRewards.style.display = 'none';
+      }
+      
+      const reward = document.createElement('div');
+      reward.className = 'w-12 h-12 rounded-full bg-tomato shadow-md flex items-center justify-center float-in';
+      reward.innerHTML = '<i class="fa fa-check text-white"></i>';
+      rewardsContainer.appendChild(reward);
+    }
+    
+    // 初始化应用
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
